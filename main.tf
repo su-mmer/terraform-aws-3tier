@@ -8,34 +8,54 @@ terraform {
 }
 
 provider "aws" {
-  region = "ap-northeast-2"
+  region = var.region
 
   default_tags {
     tags = {
-      Name = "terraform-frog"
+      Name = "${var.name}"
     }
   }
 }
 
+# locals {
+#   public_subnet_list = [
+#     {
+#       name = "public-a"
+#       subnet_cidr = cidrsubnet(var.cidr_block, 4, 1)
+#       availability_zone = 
+#     },
+#     {
+#       name="public-c"
+#       subnet_cidr = cidrsubnet(var.cidr_block. 4, 2)
+#     }
+#   ]
+# }
+
 # vpc
 resource "aws_vpc" "main" {
-  cidr_block = "10.0.180.0/24"
+  cidr_block = var.cidr_block
 }
 
 # public subnet
+# resource "aws_subnet" "public-2a" {
+#   count = 2
+#   vpc_id = aws_vpc.main.id
+#   cidr_block = var.public_subnet_list[count.index].subnet_cidr
+#   availability_zone = 
+# }
 resource "aws_subnet" "public-2a" {
-  vpc_id     = aws_vpc.main.id
-  cidr_block = "10.0.180.0/28"
-  availability_zone = "ap-northeast-2a"
+  vpc_id            = aws_vpc.main.id
+  cidr_block        = "10.0.180.0/28"
+  availability_zone = "${var.region}a"
   tags = {
     Name = "public-2a-nat"
   }
 }
 
 resource "aws_subnet" "public-2c" {
-  vpc_id     = aws_vpc.main.id
-  cidr_block = "10.0.180.64/28"
-  availability_zone = "ap-northeast-2c"
+  vpc_id            = aws_vpc.main.id
+  cidr_block        = "10.0.180.64/28"
+  availability_zone = "${var.region}c"
   tags = {
     Name = "public-2c-bastion"
   }
@@ -43,8 +63,8 @@ resource "aws_subnet" "public-2c" {
 
 # private subnet
 resource "aws_subnet" "private-1a-web" {
-  vpc_id     = aws_vpc.main.id
-  cidr_block = "10.0.180.16/28"
+  vpc_id            = aws_vpc.main.id
+  cidr_block        = "10.0.180.16/28"
   availability_zone = "ap-northeast-2a"
   tags = {
     Name = "private-1a-web"
@@ -52,8 +72,8 @@ resource "aws_subnet" "private-1a-web" {
 }
 
 resource "aws_subnet" "private-1a-was" {
-  vpc_id     = aws_vpc.main.id
-  cidr_block = "10.0.180.32/28"
+  vpc_id            = aws_vpc.main.id
+  cidr_block        = "10.0.180.32/28"
   availability_zone = "ap-northeast-2a"
   tags = {
     Name = "private-1a-was"
@@ -61,8 +81,8 @@ resource "aws_subnet" "private-1a-was" {
 }
 
 resource "aws_subnet" "private-1a-db" {
-  vpc_id     = aws_vpc.main.id
-  cidr_block = "10.0.180.48/28"
+  vpc_id            = aws_vpc.main.id
+  cidr_block        = "10.0.180.48/28"
   availability_zone = "ap-northeast-2a"
   tags = {
     Name = "private-1a-db"
@@ -70,8 +90,8 @@ resource "aws_subnet" "private-1a-db" {
 }
 
 resource "aws_subnet" "private-1c-web" {
-  vpc_id     = aws_vpc.main.id
-  cidr_block = "10.0.180.80/28"
+  vpc_id            = aws_vpc.main.id
+  cidr_block        = "10.0.180.80/28"
   availability_zone = "ap-northeast-2c"
   tags = {
     Name = "private-1c-web"
@@ -79,8 +99,8 @@ resource "aws_subnet" "private-1c-web" {
 }
 
 resource "aws_subnet" "private-1c-was" {
-  vpc_id     = aws_vpc.main.id
-  cidr_block = "10.0.180.96/28"
+  vpc_id            = aws_vpc.main.id
+  cidr_block        = "10.0.180.96/28"
   availability_zone = "ap-northeast-2c"
   tags = {
     Name = "private-1c-was"
@@ -89,7 +109,7 @@ resource "aws_subnet" "private-1c-was" {
 
 # routing table 생성 - public subnet, igw 연결
 resource "aws_route_table" "main_route" {
-  vpc_id     = aws_vpc.main.id
+  vpc_id = aws_vpc.main.id
   route {
     cidr_block = "0.0.0.0/0"
     gateway_id = aws_internet_gateway.main_igw.id
@@ -124,7 +144,7 @@ resource "aws_route_table_association" "routing_c" {
 resource "aws_internet_gateway" "main_igw" {
   vpc_id = aws_vpc.main.id
   tags = {
-    Name = "terraform-frog-igw"
+    Name = "${var.name}-igw"
   }
 }
 
@@ -136,8 +156,68 @@ resource "aws_eip" "nat-eip" {
 }
 resource "aws_nat_gateway" "main_nat" {
   allocation_id = aws_eip.nat-eip.id
-  subnet_id = aws_subnet.public-2a.id
+  subnet_id     = aws_subnet.public-2a.id
   tags = {
-    Name = "frog-nat"
+    Name = "${var.name}-nat"
+  }
+}
+
+# 보안 그룹
+resource "aws_security_group" "sg_bastion" {
+  vpc_id = aws_vpc.main.id
+  description = "allow 22 port for bastion"
+  ingress {
+    from_port = 22
+    to_port = 22
+    protocol = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+  egress {
+    from_port = 0
+    to_port = 0
+    protocol = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+  tags = {
+    Name = "${var.name}-bastion"
+  }
+}
+
+# instance
+data "aws_ami" "ubuntu" {
+  most_recent = true
+
+  filter {
+    name   = "name"
+    values = ["ubuntu/images/hvm-ssd/ubuntu-focal-20.04-amd64-server-20230918"]
+  }
+
+  filter {
+    name   = "virtualization-type"
+    values = ["hvm"]
+  }
+}
+
+resource "aws_key_pair" "main_key" {
+  key_name = "${var.name}-key"
+  public_key = file("./ssh-key.pub")
+}
+
+resource "aws_eip" "bastion_eip" {
+  instance = aws_instance.bastion.id
+  tags = {
+    Name = "${var.name}-bastion"
+  }
+}
+
+resource "aws_instance" "bastion" {
+  ami           = data.aws_ami.ubuntu.id
+  instance_type = "t3.micro"
+  subnet_id = aws_subnet.public-2c.id
+  vpc_security_group_ids = [ aws_security_group.sg_bastion.id ]
+  key_name = "${var.name}-key"
+
+  tags = {
+    Name = "${var.name}-bastion"
   }
 }
