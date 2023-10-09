@@ -163,27 +163,84 @@ resource "aws_nat_gateway" "main_nat" {
 }
 
 # 보안 그룹
-resource "aws_security_group" "sg_bastion" {
+# resource "aws_security_group" "sg_bastion" {
+#   vpc_id = aws_vpc.main.id
+#   description = "allow 22 port for bastion"
+#   ingress {
+#     from_port = 22
+#     to_port = 22
+#     protocol = "tcp"
+#     cidr_blocks = ["0.0.0.0/0"]
+#   }
+#   egress {
+#     from_port = 0
+#     to_port = 0
+#     protocol = "-1"
+#     cidr_blocks = ["0.0.0.0/0"]
+#   }
+#   tags = {
+#     Name = "${var.name}-bastion"
+#   }
+# }
+
+resource "aws_security_group" "bastion" {
   vpc_id = aws_vpc.main.id
-  description = "allow 22 port for bastion"
-  ingress {
-    from_port = 22
-    to_port = 22
-    protocol = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
-  egress {
-    from_port = 0
-    to_port = 0
-    protocol = "-1"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
+  name        = "bastion security group"
+  description = "bastion security group"
+
   tags = {
     Name = "${var.name}-bastion"
   }
 }
 
-# instance
+resource "aws_security_group" "web" {
+  vpc_id = aws_vpc.main.id
+  name        = "WEB security group"
+  description = "WEB security group"
+
+  tags = {
+    Name = "${var.name}-WEB"
+  }
+}
+
+resource "aws_security_group_rule" "sg_bastion_ingress" {
+  type                     = "ingress"
+  from_port                = 22
+  to_port                  = 22
+  protocol                 = "TCP"
+  cidr_blocks = ["0.0.0.0/0"]
+  security_group_id        = aws_security_group.bastion.id
+  # source_security_group_id = "${aws_security_group.frontend_load_balancer.id}"
+}
+
+resource "aws_security_group_rule" "sg_bastion_egress" {
+  type                     = "egress"
+  from_port                = 0
+  to_port                  = 0
+  protocol                 = "-1"
+  cidr_blocks = ["0.0.0.0/0"]
+  security_group_id        = aws_security_group.bastion.id
+}
+
+resource "aws_security_group_rule" "sg_web_ingress" {
+  type                     = "ingress"
+  from_port                = 22
+  to_port                  = 22
+  protocol                 = "TCP"
+  source_security_group_id = aws_security_group.bastion.id
+  security_group_id        = aws_security_group.web.id
+}
+
+resource "aws_security_group_rule" "sg_web_egress" {
+  type                     = "egress"
+  from_port                = 0
+  to_port                  = 0
+  protocol                 = "-1"
+  cidr_blocks = ["0.0.0.0/0"]
+  security_group_id        = aws_security_group.web.id
+}
+
+# Bastion-instance
 data "aws_ami" "ubuntu" {
   most_recent = true
 
@@ -214,10 +271,45 @@ resource "aws_instance" "bastion" {
   ami           = data.aws_ami.ubuntu.id
   instance_type = "t3.micro"
   subnet_id = aws_subnet.public-2c.id
-  vpc_security_group_ids = [ aws_security_group.sg_bastion.id ]
+  vpc_security_group_ids = [ aws_security_group.bastion.id ]
   key_name = "${var.name}-key"
+
+  # connection {
+  #   type     = "ssh"
+  #   user     = "root"
+  #   private_key = "./ssh-key.pem"
+  #   host     = aws_instance.bastion.id
+  # }
+
+  # provisioner "file" {
+  #   source = "ssh-key.pem"
+  #   destination = "${var.name}.pem"
+  # }
 
   tags = {
     Name = "${var.name}-bastion"
+  }
+}
+resource "terraform_data" "ssh-key_gen" {
+  connection {
+    type     = "ssh"
+    user     = "root"
+    private_key = "./ssh-key.pem"
+    host     = aws_instance.bastion.id
+  }
+  provisioner "file" {
+    source = "ssh-key.pem"
+    destination = "${var.name}.pem"
+  }
+}
+resource "aws_instance" "web" {
+  ami           = data.aws_ami.ubuntu.id
+  instance_type = "t3.micro"
+  subnet_id = aws_subnet.private-1a-web.id
+  vpc_security_group_ids = [ aws_security_group.web.id ]
+  key_name = "${var.name}-key"
+
+  tags = {
+    Name = "${var.name}-web01"
   }
 }
