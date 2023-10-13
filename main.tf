@@ -255,59 +255,51 @@ data "aws_ami" "ubuntu" {
   }
 }
 
-resource "aws_key_pair" "main_key" {
-  key_name = "${var.name}-key"
-  public_key = file("./ssh-key.pub")
-}
+# resource "aws_key_pair" "main_key" {
+#   key_name = "${var.name}-key"
+#   public_key = file("./ssh-key.pub")
+# }
 
-resource "aws_eip" "bastion_eip" {
-  instance = aws_instance.bastion.id
-  tags = {
-    Name = "${var.name}-bastion"
-  }
-}
+# resource "aws_eip" "bastion_eip" {
+#   instance = aws_instance.bastion.id
+#   tags = {
+#     Name = "${var.name}-bastion"
+#   }
+# }
 
-resource "aws_instance" "bastion" {
-  ami           = data.aws_ami.ubuntu.id
-  instance_type = "t3.micro"
-  subnet_id = aws_subnet.public-2c.id
-  vpc_security_group_ids = [ aws_security_group.bastion.id ]
-  key_name = "${var.name}-key"
+# resource "aws_instance" "bastion" {
+#   ami           = data.aws_ami.ubuntu.id
+#   instance_type = "t3.micro"
+#   subnet_id = aws_subnet.public-2c.id
+#   # iam_instance_profile = "hh-terraform-ec2-ssm"
+#   vpc_security_group_ids = [ aws_security_group.bastion.id ]
+#   # key_name = "${var.name}-key"
 
-  # connection {
-  #   type     = "ssh"
-  #   user     = "root"
-  #   private_key = "./ssh-key.pem"
-  #   host     = aws_instance.bastion.id
-  # }
+#   tags = {
+#     Name = "${var.name}-bastion"
+#   }
+# }
 
-  # provisioner "file" {
-  #   source = "ssh-key.pem"
-  #   destination = "${var.name}.pem"
-  # }
-
-  tags = {
-    Name = "${var.name}-bastion"
-  }
-}
-resource "terraform_data" "ssh-key_gen" {
-  connection {
-    type     = "ssh"
-    user     = "root"
-    private_key = "./ssh-key.pem"
-    host     = aws_instance.bastion.id
-  }
-  provisioner "file" {
-    source = "ssh-key.pem"
-    destination = "${var.name}.pem"
-  }
-}
+# resource "terraform_data" "ssh-key_gen" {
+#   connection {
+#     type     = "ssh"
+#     user     = "ubuntu"
+#     private_key = file("./ssh-key.pem")
+#     host     = aws_eip.bastion_eip.public_ip
+#   }
+#   provisioner "file" {
+#     source = "./ssh-key.pem"
+#     # source = "./ssh-key.pem"
+#     destination = "./${var.name}.pem"
+#   }
+# }
 resource "aws_instance" "web" {
   ami           = data.aws_ami.ubuntu.id
   instance_type = "t3.micro"
   subnet_id = aws_subnet.private-1a-web.id
   vpc_security_group_ids = [ aws_security_group.web.id ]
-  key_name = "${var.name}-key"
+  # key_name = "${var.name}-key"
+  iam_instance_profile = "hh-terraform-ec2-ssm"
 
   tags = {
     Name = "${var.name}-web01"
