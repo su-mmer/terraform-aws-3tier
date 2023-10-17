@@ -43,7 +43,7 @@ resource "aws_vpc" "main" {
 #   cidr_block = var.public_subnet_list[count.index].subnet_cidr
 #   availability_zone = 
 # }
-resource "aws_subnet" "public-2a" {
+resource "aws_subnet" "public-2a-nat" {
   vpc_id            = aws_vpc.main.id
   cidr_block        = "10.0.180.0/28"
   availability_zone = "${var.region}a"
@@ -52,7 +52,7 @@ resource "aws_subnet" "public-2a" {
   }
 }
 
-resource "aws_subnet" "public-2c" {
+resource "aws_subnet" "public-2c-bastion" {
   vpc_id            = aws_vpc.main.id
   cidr_block        = "10.0.180.64/28"
   availability_zone = "${var.region}c"
@@ -131,15 +131,15 @@ resource "aws_default_route_table" "name" {
 }
 # routing table에 public subnet 추가
 resource "aws_route_table_association" "routing_a" {
-  subnet_id      = aws_subnet.public-2a.id
+  subnet_id      = aws_subnet.public-2a-nat.id
   route_table_id = aws_route_table.main_route.id
 }
-
+/*
 resource "aws_route_table_association" "routing_c" {
-  subnet_id      = aws_subnet.public-2c.id
+  subnet_id      = aws_subnet.public-2c-bastion.id
   route_table_id = aws_route_table.main_route.id
 }
-
+*/
 # igw
 resource "aws_internet_gateway" "main_igw" {
   vpc_id = aws_vpc.main.id
@@ -156,14 +156,14 @@ resource "aws_eip" "nat-eip" {
 }
 resource "aws_nat_gateway" "main_nat" {
   allocation_id = aws_eip.nat-eip.id
-  subnet_id     = aws_subnet.public-2a.id
+  subnet_id     = aws_subnet.public-2a-nat.id
   tags = {
     Name = "${var.name}-nat"
   }
 }
 
 # 보안 그룹
-# resource "aws_security_group" "sg_bastion" {
+# resource "aws_security_group" "sg_bastion" {  # ! 이렇게 생성하면 안 됨
 #   vpc_id = aws_vpc.main.id
 #   description = "allow 22 port for bastion"
 #   ingress {
@@ -182,7 +182,7 @@ resource "aws_nat_gateway" "main_nat" {
 #     Name = "${var.name}-bastion"
 #   }
 # }
-
+/*
 resource "aws_security_group" "bastion" {
   vpc_id = aws_vpc.main.id
   name        = "bastion security group"
@@ -192,17 +192,27 @@ resource "aws_security_group" "bastion" {
     Name = "${var.name}-bastion"
   }
 }
-
+*/
 resource "aws_security_group" "web" {
   vpc_id = aws_vpc.main.id
-  name        = "WEB security group"
-  description = "WEB security group"
+  name        = "web-sg"
+  description = "web security group"
 
   tags = {
-    Name = "${var.name}-WEB"
+    Name = "${var.name}-web"
   }
 }
 
+resource "aws_security_group" "alb" {
+  vpc_id = aws_vpc.main.id
+  name        = "alb-sg"
+  description = "alb security group"
+
+  tags = {
+    Name = "${var.name}-alb"
+  }
+}
+/*
 resource "aws_security_group_rule" "sg_bastion_ingress" {
   type                     = "ingress"
   from_port                = 22
@@ -221,23 +231,41 @@ resource "aws_security_group_rule" "sg_bastion_egress" {
   cidr_blocks = ["0.0.0.0/0"]
   security_group_id        = aws_security_group.bastion.id
 }
-
+*/
 resource "aws_security_group_rule" "sg_web_ingress" {
   type                     = "ingress"
-  from_port                = 22
-  to_port                  = 22
+  from_port                = 80
+  to_port                  = 80
   protocol                 = "TCP"
-  source_security_group_id = aws_security_group.bastion.id
+  source_security_group_id = aws_security_group.alb.id
   security_group_id        = aws_security_group.web.id
 }
 
 resource "aws_security_group_rule" "sg_web_egress" {
   type                     = "egress"
-  from_port                = 0
+  from_port                = 0  # ! was로 나가는거 추가
   to_port                  = 0
   protocol                 = "-1"
   cidr_blocks = ["0.0.0.0/0"]
   security_group_id        = aws_security_group.web.id
+}
+
+resource "aws_security_group_rule" "sg_alb_ingress" {
+  type                     = "ingress"
+  from_port                = 80
+  to_port                  = 80
+  protocol                 = "TCP"
+  cidr_blocks = ["0.0.0.0/0"]  # 외부로부터 들어오는 모든 통신
+  security_group_id        = aws_security_group.alb.id
+}
+
+resource "aws_security_group_rule" "sg_alb_egress" {
+  type                     = "egress"
+  from_port                = 80
+  to_port                  = 80
+  protocol                 = "TCP"
+  source_security_group_id = aws_security_group.web.id  # 통신을 web 보안그룹으로 전달해줌
+  security_group_id        = aws_security_group.alb.id
 }
 
 # Bastion-instance
@@ -245,9 +273,14 @@ data "aws_ami" "ubuntu" {
   most_recent = true
 
   filter {
-    name   = "name"
-    values = ["ubuntu/images/hvm-ssd/ubuntu-focal-20.04-amd64-server-20230918"]
+    name = "image-id"
+    values = ["ami-09af799f87c7601fa"]
   }
+
+  # filter {
+  #   name   = "name"
+  #   values = ["ubuntu/images/hvm-ssd/ubuntu-focal-20.04-amd64-server-20230918"]
+  # }
 
   filter {
     name   = "virtualization-type"
@@ -294,14 +327,77 @@ data "aws_ami" "ubuntu" {
 #   }
 # }
 resource "aws_instance" "web" {
+  count = 2
   ami           = data.aws_ami.ubuntu.id
   instance_type = "t3.micro"
   subnet_id = aws_subnet.private-1a-web.id
   vpc_security_group_ids = [ aws_security_group.web.id ]
   # key_name = "${var.name}-key"
   iam_instance_profile = "hh-terraform-ec2-ssm"
+  user_data = <<EOF
+    #! /bin/bash
+    sudo yum update
+    sudo yum install -y httpd
+    sudo service httpd start
+    echo $(ec2-metadata -i) >> /var/www/html/index.html
+    EOF
 
   tags = {
-    Name = "${var.name}-web01"
+    Name = "${var.name}-web0${count.index}"
+    # Name = "${var.name}-web01"
   }
+}
+
+# resource "aws_instance" "web02" {
+#   ami           = data.aws_ami.ubuntu.id
+#   instance_type = "t3.micro"
+#   subnet_id = aws_subnet.private-1c-web.id
+#   vpc_security_group_ids = [ aws_security_group.web.id ]
+#   # key_name = "${var.name}-key"
+#   iam_instance_profile = "hh-terraform-ec2-ssm"
+
+#   tags = {
+#     Name = "${var.name}-web02"
+#   }
+# }
+
+# ALB 설정
+resource "aws_lb_target_group" "web_target" {
+  name = "${var.name}-web-target"
+  port = 80
+  protocol = "HTTP"
+  vpc_id = aws_vpc.main.id
+}
+
+resource "aws_lb_target_group_attachment" "target_attach1" {
+  # for_each = toset(resource.aws_instance.web.id)
+  for_each = {
+    for k, v in aws_instance.web.id :
+    v.id => v
+  }
+  target_group_arn = aws_lb_target_group.web_target.arn
+  target_id = each.value
+}
+
+# resource "aws_lb_target_group_attachment" "target_attach2" {
+#   target_group_arn = aws_lb_target_group.web_target.arn
+#   target_id = aws_instance.web02.id
+# }
+
+resource "aws_lb_listener" "web_alb_listener" {
+  load_balancer_arn = aws_alb.web_alb.arn
+  port = "80"
+  protocol = "HTTP"
+  default_action {
+    type             = "forward"
+    target_group_arn = aws_lb_target_group.web_target.arn
+  }
+}
+
+resource "aws_alb" "web_alb" {
+  name = "${var.name}-alb"
+  internal = false
+  load_balancer_type = "application"
+  security_groups = [ aws_security_group.alb.id ]
+  subnets = [ aws_subnet.public-2a-nat.id, aws_subnet.public-2c-bastion.id ]
 }
