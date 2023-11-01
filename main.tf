@@ -334,13 +334,15 @@ resource "aws_instance" "web" {
   vpc_security_group_ids = [ aws_security_group.web.id ]
   # key_name = "${var.name}-key"
   iam_instance_profile = "hh-terraform-ec2-ssm"
-  user_data = <<EOF
-    #! /bin/bash
+  user_data = <<-EOF
+    #!/bin/bash
+    echo "******Installing apache*******"
     sudo yum update
     sudo yum install -y httpd
     sudo service httpd start
     echo $(ec2-metadata -i) >> /var/www/html/index.html
-    EOF
+    echo "******Finish Install apache*******"
+  EOF
 
   tags = {
     Name = "${var.name}-web0${count.index}"
@@ -370,13 +372,17 @@ resource "aws_lb_target_group" "web_target" {
 }
 
 resource "aws_lb_target_group_attachment" "target_attach1" {
-  # for_each = toset(resource.aws_instance.web.id)
-  for_each = {
-    for k, v in aws_instance.web.id :
-    v.id => v
-  }
+  count = 2
+  # for_each = toset(resource.aws_instance.web[count.index].id)
+  # for_each = {
+  #   for k, v in aws_instance.web :
+  #   v.id => v
+  # }
   target_group_arn = aws_lb_target_group.web_target.arn
-  target_id = each.value
+  # target_id = each.value.id
+  target_id = aws_instance.web[count.index].id
+  # target_id = element(aws_instance.web.id, count.index)
+  # depends_on = [ aws_instance.web, aws_lb_target_group.web_target ]
 }
 
 # resource "aws_lb_target_group_attachment" "target_attach2" {
