@@ -17,32 +17,12 @@ provider "aws" {
   }
 }
 
-# locals {
-#   public_subnet_list = [
-#     {
-#       name = "public-a"
-#       subnet_cidr = cidrsubnet(var.cidr_block, 4, 1)
-#       availability_zone = 
-#     },
-#     {
-#       name="public-c"
-#       subnet_cidr = cidrsubnet(var.cidr_block. 4, 2)
-#     }
-#   ]
-# }
-
 # vpc
 resource "aws_vpc" "main" {
   cidr_block = var.cidr_block
 }
 
 # public subnet
-# resource "aws_subnet" "public-2a" {
-#   count = 2
-#   vpc_id = aws_vpc.main.id
-#   cidr_block = var.public_subnet_list[count.index].subnet_cidr
-#   availability_zone = 
-# }
 resource "aws_subnet" "public-2a-nat" {
   vpc_id            = aws_vpc.main.id
   cidr_block        = "10.0.180.0/28"
@@ -52,60 +32,130 @@ resource "aws_subnet" "public-2a-nat" {
   }
 }
 
-resource "aws_subnet" "public-2c-bastion" {
-  vpc_id            = aws_vpc.main.id
-  cidr_block        = "10.0.180.64/28"
-  availability_zone = "${var.region}c"
+# resource "aws_subnet" "public-2c-bastion" {
+#   vpc_id            = aws_vpc.main.id
+#   cidr_block        = "10.0.180.64/28"
+#   availability_zone = "${var.region}c"
+#   tags = {
+#     Name = "public-2c-bastion"
+#   }
+# }
+
+locals {
+  private_web_subnet_list = [  // private subnet을 만들 때 사용할 배열
+    {
+      name              = "private-1a-web"  // private subnet을 만들 때 사용할 이름
+      subnet_cidr       = cidrsubnet(aws_vpc.main.cidr_block, 4, 1)  // 10.0.180.16/28
+      availability_zone = "ap-northeast-2a"
+    },
+    {
+      name              = "private-1c-web"
+      subnet_cidr       = cidrsubnet(aws_vpc.main.cidr_block, 4, 2)  // 10.0.180.32/24
+      availability_zone = "ap-northeast-2c"
+    },
+  ]
+
+  private_was_subnet_list = [
+    {
+      name              = "private-1a-was"  // private subnet을 만들 때 사용할 이름
+      subnet_cidr       = cidrsubnet(aws_vpc.main.cidr_block, 4, 3)  // 10.0.180.48/28
+      availability_zone = "ap-northeast-2a"
+    },
+    {
+      name              = "private-1c-was"
+      subnet_cidr       = cidrsubnet(aws_vpc.main.cidr_block, 4, 4)  // 10.0.180.64/24
+      availability_zone = "ap-northeast-2c"
+    },
+  ]
+
+  private_db_subnet_list = [
+    {
+      name              = "private-1a-db"  // private subnet을 만들 때 사용할 이름
+      subnet_cidr       = cidrsubnet(aws_vpc.main.cidr_block, 4, 5)  // 10.0.180.80/28
+      availability_zone = "ap-northeast-2a"
+    },
+  ]
+
+}
+
+resource "aws_subnet" "private-web" {  // subnet 생성
+  count                   = 2  // 갯수
+  vpc_id                  = aws_vpc.main.id  // 생성한 vpc id
+  cidr_block              = local.private_web_subnet_list[count.index].subnet_cidr  // 전달받은 cidr로 subnet 생성
+  availability_zone       = local.private_web_subnet_list[count.index].availability_zone  // 전달받은 az
+  # map_public_ip_on_launch = false  // public ip 미할당
   tags = {
-    Name = "public-2c-bastion"
+    Name = "${local.private_web_subnet_list[count.index].name}"
+  }
+}
+
+resource "aws_subnet" "private-was" {  // subnet 생성
+  count                   = 2  // 갯수
+  vpc_id                  = aws_vpc.main.id  // 생성한 vpc id
+  cidr_block              = local.private_was_subnet_list[count.index].subnet_cidr  // 전달받은 cidr로 subnet 생성
+  availability_zone       = local.private_was_subnet_list[count.index].availability_zone  // 전달받은 az
+  # map_public_ip_on_launch = false  // public ip 미할당
+  tags = {
+    Name = "${local.private_was_subnet_list[count.index].name}"
+  }
+}
+
+resource "aws_subnet" "private-db" {  // subnet 생성
+  count                   = 1  // 갯수
+  vpc_id                  = aws_vpc.main.id  // 생성한 vpc id
+  cidr_block              = local.private_db_subnet_list[count.index].subnet_cidr  // 전달받은 cidr로 subnet 생성
+  availability_zone       = local.private_db_subnet_list[count.index].availability_zone  // 전달받은 az
+  # map_public_ip_on_launch = false  // public ip 미할당
+  tags = {
+    Name = "${local.private_db_subnet_list[count.index].name}"
   }
 }
 
 # private subnet
-resource "aws_subnet" "private-1a-web" {
-  vpc_id            = aws_vpc.main.id
-  cidr_block        = "10.0.180.16/28"
-  availability_zone = "ap-northeast-2a"
-  tags = {
-    Name = "private-1a-web"
-  }
-}
+# resource "aws_subnet" "private-1a-web" {
+#   vpc_id            = aws_vpc.main.id
+#   cidr_block        = "10.0.180.16/28"
+#   availability_zone = "ap-northeast-2a"
+#   tags = {
+#     Name = "private-1a-web"
+#   }
+# }
 
-resource "aws_subnet" "private-1a-was" {
-  vpc_id            = aws_vpc.main.id
-  cidr_block        = "10.0.180.32/28"
-  availability_zone = "ap-northeast-2a"
-  tags = {
-    Name = "private-1a-was"
-  }
-}
+# resource "aws_subnet" "private-1a-was" {
+#   vpc_id            = aws_vpc.main.id
+#   cidr_block        = "10.0.180.32/28"
+#   availability_zone = "ap-northeast-2a"
+#   tags = {
+#     Name = "private-1a-was"
+#   }
+# }
 
-resource "aws_subnet" "private-1a-db" {
-  vpc_id            = aws_vpc.main.id
-  cidr_block        = "10.0.180.48/28"
-  availability_zone = "ap-northeast-2a"
-  tags = {
-    Name = "private-1a-db"
-  }
-}
+# resource "aws_subnet" "private-1a-db" {
+#   vpc_id            = aws_vpc.main.id
+#   cidr_block        = "10.0.180.48/28"
+#   availability_zone = "ap-northeast-2a"
+#   tags = {
+#     Name = "private-1a-db"
+#   }
+# }
 
-resource "aws_subnet" "private-1c-web" {
-  vpc_id            = aws_vpc.main.id
-  cidr_block        = "10.0.180.80/28"
-  availability_zone = "ap-northeast-2c"
-  tags = {
-    Name = "private-1c-web"
-  }
-}
+# resource "aws_subnet" "private-1c-web" {
+#   vpc_id            = aws_vpc.main.id
+#   cidr_block        = "10.0.180.80/28"
+#   availability_zone = "ap-northeast-2c"
+#   tags = {
+#     Name = "private-1c-web"
+#   }
+# }
 
-resource "aws_subnet" "private-1c-was" {
-  vpc_id            = aws_vpc.main.id
-  cidr_block        = "10.0.180.96/28"
-  availability_zone = "ap-northeast-2c"
-  tags = {
-    Name = "private-1c-was"
-  }
-}
+# resource "aws_subnet" "private-1c-was" {
+#   vpc_id            = aws_vpc.main.id
+#   cidr_block        = "10.0.180.96/28"
+#   availability_zone = "ap-northeast-2c"
+#   tags = {
+#     Name = "private-1c-was"
+#   }
+# }
 
 # routing table 생성 - public subnet, igw 연결
 resource "aws_route_table" "main_route" {
@@ -118,6 +168,7 @@ resource "aws_route_table" "main_route" {
     Name = "public_rt"
   }
 }
+
 # default routing table- private subent, nat 연결
 resource "aws_default_route_table" "name" {
   default_route_table_id = aws_vpc.main.default_route_table_id
@@ -129,6 +180,7 @@ resource "aws_default_route_table" "name" {
     Name = "default_rt"
   }
 }
+
 # routing table에 public subnet 추가
 resource "aws_route_table_association" "routing_a" {
   subnet_id      = aws_subnet.public-2a-nat.id
@@ -170,7 +222,7 @@ resource "aws_nat_gateway" "main_nat" {
 #     from_port = 22
 #     to_port = 22
 #     protocol = "tcp"
-#     cidr_blocks = ["0.0.0.0/0"]
+#     cidr_blocks = ["0.0.0.0/0"]  # ! security group에 ingress를 생성하면 cidr_blocks만 이용가능
 #   }
 #   egress {
 #     from_port = 0
@@ -200,6 +252,26 @@ resource "aws_security_group" "web" {
 
   tags = {
     Name = "${var.name}-web"
+  }
+}
+
+resource "aws_security_group" "was" {
+  vpc_id = aws_vpc.main.id
+  name        = "was-sg"
+  description = "was security group"
+
+  tags = {
+    Name = "${var.name}-was"
+  }
+}
+
+resource "aws_security_group" "db" {
+  vpc_id = aws_vpc.main.id
+  name        = "db-sg"
+  description = "db security group"
+
+  tags = {
+    Name = "${var.name}-db"
   }
 }
 
@@ -243,11 +315,65 @@ resource "aws_security_group_rule" "sg_web_ingress" {
 
 resource "aws_security_group_rule" "sg_web_egress" {
   type                     = "egress"
-  from_port                = 0  # ! was로 나가는거 추가
+  from_port                = 8080
+  to_port                  = 8080
+  protocol                 = "TCP"
+  source_security_group_id = aws_security_group.was.id
+  security_group_id        = aws_security_group.web.id
+}
+
+resource "aws_security_group_rule" "sg_web_egress_443" {
+  type                     = "egress"
+  from_port                = 443
+  to_port                  = 443
+  protocol                 = "TCP"
+  cidr_blocks = ["0.0.0.0/0"]
+  security_group_id        = aws_security_group.web.id
+}
+
+resource "aws_security_group_rule" "sg_was_ingress" {
+  type                     = "ingress"
+  from_port                = 8080
+  to_port                  = 8080
+  protocol                 = "TCP"
+  source_security_group_id = aws_security_group.web.id
+  security_group_id        = aws_security_group.was.id
+}
+
+resource "aws_security_group_rule" "sg_was_egress" {
+  type                     = "egress"
+  from_port                = 3306
+  to_port                  = 3306
+  protocol                 = "TCP"
+  source_security_group_id = aws_security_group.db.id
+  security_group_id        = aws_security_group.was.id
+}
+
+resource "aws_security_group_rule" "sg_was_egress_443" {
+  type                     = "egress"
+  from_port                = 443
+  to_port                  = 443
+  protocol                 = "TCP"
+  cidr_blocks = ["0.0.0.0/0"]
+  security_group_id        = aws_security_group.was.id
+}
+
+resource "aws_security_group_rule" "sg_db_ingress" {
+  type                     = "ingress"
+  from_port                = 80
+  to_port                  = 80
+  protocol                 = "TCP"
+  source_security_group_id = aws_security_group.was.id
+  security_group_id        = aws_security_group.db.id
+}
+
+resource "aws_security_group_rule" "sg_db_egress" {
+  type                     = "egress"
+  from_port                = 0
   to_port                  = 0
   protocol                 = "-1"
   cidr_blocks = ["0.0.0.0/0"]
-  security_group_id        = aws_security_group.web.id
+  security_group_id        = aws_security_group.db.id
 }
 
 resource "aws_security_group_rule" "sg_alb_ingress" {
@@ -268,7 +394,7 @@ resource "aws_security_group_rule" "sg_alb_egress" {
   security_group_id        = aws_security_group.alb.id
 }
 
-# Bastion-instance
+# instance
 data "aws_ami" "ubuntu" {
   most_recent = true
 
@@ -326,42 +452,53 @@ data "aws_ami" "ubuntu" {
 #     destination = "./${var.name}.pem"
 #   }
 # }
+
+variable "subnet_ids" {
+  default = {
+    a = "private-1a-web"
+    c = "private-1c-web"
+    }
+}
+
 resource "aws_instance" "web" {
   count = 2
-  ami           = data.aws_ami.ubuntu.id
+  ami = data.aws_ami.ubuntu.id
   instance_type = "t3.micro"
-  subnet_id = aws_subnet.private-1a-web.id
+  subnet_id = aws_subnet.private-web[count.index].id
   vpc_security_group_ids = [ aws_security_group.web.id ]
   # key_name = "${var.name}-key"
   iam_instance_profile = "hh-terraform-ec2-ssm"
-  user_data = <<-EOF
+
+  user_data = <<EOF
     #!/bin/bash
-    echo "******Installing apache*******"
-    sudo yum update
-    sudo yum install -y httpd
-    sudo service httpd start
-    echo $(ec2-metadata -i) >> /var/www/html/index.html
-    echo "******Finish Install apache*******"
+    sudo yum update -y
+    sudo yum install -y httpd.x86_64
+    sudo systemctl start httpd.service
+    sudo systemctl enable httpd.service
+    sudo echo $(ec2-metadata -i) >> /var/www/html/index.html
   EOF
 
   tags = {
-    Name = "${var.name}-web0${count.index}"
-    # Name = "${var.name}-web01"
+    Name = "${var.name}-web${count.index}"
   }
 }
 
-# resource "aws_instance" "web02" {
-#   ami           = data.aws_ami.ubuntu.id
-#   instance_type = "t3.micro"
-#   subnet_id = aws_subnet.private-1c-web.id
-#   vpc_security_group_ids = [ aws_security_group.web.id ]
-#   # key_name = "${var.name}-key"
-#   iam_instance_profile = "hh-terraform-ec2-ssm"
+resource "aws_instance" "was" {
+  count = 2
+  ami = data.aws_ami.ubuntu.id
+  instance_type = "t3.micro"
+  subnet_id = aws_subnet.private-was[count.index].id
+  vpc_security_group_ids = [ aws_security_group.was.id ]
+  # key_name = "${var.name}-key"
+  iam_instance_profile = "hh-terraform-ec2-ssm"
+  user_data = <<-EOF
+   
+  EOF
 
-#   tags = {
-#     Name = "${var.name}-web02"
-#   }
-# }
+  tags = {
+    Name = "${var.name}-was${count.index}"
+  }
+}
 
 # ALB 설정
 resource "aws_lb_target_group" "web_target" {
@@ -373,16 +510,10 @@ resource "aws_lb_target_group" "web_target" {
 
 resource "aws_lb_target_group_attachment" "target_attach1" {
   count = 2
-  # for_each = toset(resource.aws_instance.web[count.index].id)
-  # for_each = {
-  #   for k, v in aws_instance.web :
-  #   v.id => v
-  # }
+  # for_each = var.subnet_ids
   target_group_arn = aws_lb_target_group.web_target.arn
   # target_id = each.value.id
   target_id = aws_instance.web[count.index].id
-  # target_id = element(aws_instance.web.id, count.index)
-  # depends_on = [ aws_instance.web, aws_lb_target_group.web_target ]
 }
 
 # resource "aws_lb_target_group_attachment" "target_attach2" {
@@ -405,5 +536,5 @@ resource "aws_alb" "web_alb" {
   internal = false
   load_balancer_type = "application"
   security_groups = [ aws_security_group.alb.id ]
-  subnets = [ aws_subnet.public-2a-nat.id, aws_subnet.public-2c-bastion.id ]
+  subnets = [ aws_subnet.private-web[0].id, aws_subnet.private-web[1].id ]
 }
