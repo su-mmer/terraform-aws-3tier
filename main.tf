@@ -32,14 +32,14 @@ resource "aws_subnet" "public-2a-nat" {
   }
 }
 
-# resource "aws_subnet" "public-2c-bastion" {
-#   vpc_id            = aws_vpc.main.id
-#   cidr_block        = "10.0.180.64/28"
-#   availability_zone = "${var.region}c"
-#   tags = {
-#     Name = "public-2c-bastion"
-#   }
-# }
+resource "aws_subnet" "public-2c-bastion" {
+  vpc_id            = aws_vpc.main.id
+  cidr_block        = "10.0.180.96/28"
+  availability_zone = "${var.region}c"
+  tags = {
+    Name = "public-2c-bastion"
+  }
+}
 
 locals {
   private_web_subnet_list = [  // private subnet을 만들 때 사용할 배열
@@ -83,7 +83,6 @@ resource "aws_subnet" "private-web" {  // subnet 생성
   vpc_id                  = aws_vpc.main.id  // 생성한 vpc id
   cidr_block              = local.private_web_subnet_list[count.index].subnet_cidr  // 전달받은 cidr로 subnet 생성
   availability_zone       = local.private_web_subnet_list[count.index].availability_zone  // 전달받은 az
-  # map_public_ip_on_launch = false  // public ip 미할당
   tags = {
     Name = "${local.private_web_subnet_list[count.index].name}"
   }
@@ -94,7 +93,6 @@ resource "aws_subnet" "private-was" {  // subnet 생성
   vpc_id                  = aws_vpc.main.id  // 생성한 vpc id
   cidr_block              = local.private_was_subnet_list[count.index].subnet_cidr  // 전달받은 cidr로 subnet 생성
   availability_zone       = local.private_was_subnet_list[count.index].availability_zone  // 전달받은 az
-  # map_public_ip_on_launch = false  // public ip 미할당
   tags = {
     Name = "${local.private_was_subnet_list[count.index].name}"
   }
@@ -105,57 +103,10 @@ resource "aws_subnet" "private-db" {  // subnet 생성
   vpc_id                  = aws_vpc.main.id  // 생성한 vpc id
   cidr_block              = local.private_db_subnet_list[count.index].subnet_cidr  // 전달받은 cidr로 subnet 생성
   availability_zone       = local.private_db_subnet_list[count.index].availability_zone  // 전달받은 az
-  # map_public_ip_on_launch = false  // public ip 미할당
   tags = {
     Name = "${local.private_db_subnet_list[count.index].name}"
   }
 }
-
-# private subnet
-# resource "aws_subnet" "private-1a-web" {
-#   vpc_id            = aws_vpc.main.id
-#   cidr_block        = "10.0.180.16/28"
-#   availability_zone = "ap-northeast-2a"
-#   tags = {
-#     Name = "private-1a-web"
-#   }
-# }
-
-# resource "aws_subnet" "private-1a-was" {
-#   vpc_id            = aws_vpc.main.id
-#   cidr_block        = "10.0.180.32/28"
-#   availability_zone = "ap-northeast-2a"
-#   tags = {
-#     Name = "private-1a-was"
-#   }
-# }
-
-# resource "aws_subnet" "private-1a-db" {
-#   vpc_id            = aws_vpc.main.id
-#   cidr_block        = "10.0.180.48/28"
-#   availability_zone = "ap-northeast-2a"
-#   tags = {
-#     Name = "private-1a-db"
-#   }
-# }
-
-# resource "aws_subnet" "private-1c-web" {
-#   vpc_id            = aws_vpc.main.id
-#   cidr_block        = "10.0.180.80/28"
-#   availability_zone = "ap-northeast-2c"
-#   tags = {
-#     Name = "private-1c-web"
-#   }
-# }
-
-# resource "aws_subnet" "private-1c-was" {
-#   vpc_id            = aws_vpc.main.id
-#   cidr_block        = "10.0.180.96/28"
-#   availability_zone = "ap-northeast-2c"
-#   tags = {
-#     Name = "private-1c-was"
-#   }
-# }
 
 # routing table 생성 - public subnet, igw 연결
 resource "aws_route_table" "main_route" {
@@ -186,12 +137,12 @@ resource "aws_route_table_association" "routing_a" {
   subnet_id      = aws_subnet.public-2a-nat.id
   route_table_id = aws_route_table.main_route.id
 }
-/*
+
 resource "aws_route_table_association" "routing_c" {
   subnet_id      = aws_subnet.public-2c-bastion.id
   route_table_id = aws_route_table.main_route.id
 }
-*/
+
 # igw
 resource "aws_internet_gateway" "main_igw" {
   vpc_id = aws_vpc.main.id
@@ -215,36 +166,6 @@ resource "aws_nat_gateway" "main_nat" {
 }
 
 # 보안 그룹
-# resource "aws_security_group" "sg_bastion" {  # ! 이렇게 생성하면 안 됨
-#   vpc_id = aws_vpc.main.id
-#   description = "allow 22 port for bastion"
-#   ingress {
-#     from_port = 22
-#     to_port = 22
-#     protocol = "tcp"
-#     cidr_blocks = ["0.0.0.0/0"]  # ! security group에 ingress를 생성하면 cidr_blocks만 이용가능
-#   }
-#   egress {
-#     from_port = 0
-#     to_port = 0
-#     protocol = "-1"
-#     cidr_blocks = ["0.0.0.0/0"]
-#   }
-#   tags = {
-#     Name = "${var.name}-bastion"
-#   }
-# }
-/*
-resource "aws_security_group" "bastion" {
-  vpc_id = aws_vpc.main.id
-  name        = "bastion security group"
-  description = "bastion security group"
-
-  tags = {
-    Name = "${var.name}-bastion"
-  }
-}
-*/
 resource "aws_security_group" "web" {
   vpc_id = aws_vpc.main.id
   name        = "web-sg"
@@ -284,26 +205,7 @@ resource "aws_security_group" "alb" {
     Name = "${var.name}-alb"
   }
 }
-/*
-resource "aws_security_group_rule" "sg_bastion_ingress" {
-  type                     = "ingress"
-  from_port                = 22
-  to_port                  = 22
-  protocol                 = "TCP"
-  cidr_blocks = ["0.0.0.0/0"]
-  security_group_id        = aws_security_group.bastion.id
-  # source_security_group_id = "${aws_security_group.frontend_load_balancer.id}"
-}
 
-resource "aws_security_group_rule" "sg_bastion_egress" {
-  type                     = "egress"
-  from_port                = 0
-  to_port                  = 0
-  protocol                 = "-1"
-  cidr_blocks = ["0.0.0.0/0"]
-  security_group_id        = aws_security_group.bastion.id
-}
-*/
 resource "aws_security_group_rule" "sg_web_ingress" {
   type                     = "ingress"
   from_port                = 80
@@ -313,20 +215,11 @@ resource "aws_security_group_rule" "sg_web_ingress" {
   security_group_id        = aws_security_group.web.id
 }
 
-resource "aws_security_group_rule" "sg_web_egress" {
+resource "aws_security_group_rule" "sg_web_egress_all" {
   type                     = "egress"
-  from_port                = 8080
-  to_port                  = 8080
-  protocol                 = "TCP"
-  source_security_group_id = aws_security_group.was.id
-  security_group_id        = aws_security_group.web.id
-}
-
-resource "aws_security_group_rule" "sg_web_egress_443" {
-  type                     = "egress"
-  from_port                = 443
-  to_port                  = 443
-  protocol                 = "TCP"
+  from_port                = 0
+  to_port                  = 0
+  protocol                 = "-1"
   cidr_blocks = ["0.0.0.0/0"]
   security_group_id        = aws_security_group.web.id
 }
@@ -401,63 +294,13 @@ data "aws_ami" "ubuntu" {
   filter {
     name = "image-id"
     values = ["ami-09af799f87c7601fa"]
+    # values = ["ami-03a94e768a99fbb77"]  # ubuntu
   }
-
-  # filter {
-  #   name   = "name"
-  #   values = ["ubuntu/images/hvm-ssd/ubuntu-focal-20.04-amd64-server-20230918"]
-  # }
 
   filter {
     name   = "virtualization-type"
     values = ["hvm"]
   }
-}
-
-# resource "aws_key_pair" "main_key" {
-#   key_name = "${var.name}-key"
-#   public_key = file("./ssh-key.pub")
-# }
-
-# resource "aws_eip" "bastion_eip" {
-#   instance = aws_instance.bastion.id
-#   tags = {
-#     Name = "${var.name}-bastion"
-#   }
-# }
-
-# resource "aws_instance" "bastion" {
-#   ami           = data.aws_ami.ubuntu.id
-#   instance_type = "t3.micro"
-#   subnet_id = aws_subnet.public-2c.id
-#   # iam_instance_profile = "hh-terraform-ec2-ssm"
-#   vpc_security_group_ids = [ aws_security_group.bastion.id ]
-#   # key_name = "${var.name}-key"
-
-#   tags = {
-#     Name = "${var.name}-bastion"
-#   }
-# }
-
-# resource "terraform_data" "ssh-key_gen" {
-#   connection {
-#     type     = "ssh"
-#     user     = "ubuntu"
-#     private_key = file("./ssh-key.pem")
-#     host     = aws_eip.bastion_eip.public_ip
-#   }
-#   provisioner "file" {
-#     source = "./ssh-key.pem"
-#     # source = "./ssh-key.pem"
-#     destination = "./${var.name}.pem"
-#   }
-# }
-
-variable "subnet_ids" {
-  default = {
-    a = "private-1a-web"
-    c = "private-1c-web"
-    }
 }
 
 resource "aws_instance" "web" {
@@ -466,16 +309,15 @@ resource "aws_instance" "web" {
   instance_type = "t3.micro"
   subnet_id = aws_subnet.private-web[count.index].id
   vpc_security_group_ids = [ aws_security_group.web.id ]
-  # key_name = "${var.name}-key"
   iam_instance_profile = "hh-terraform-ec2-ssm"
 
   user_data = <<EOF
     #!/bin/bash
     sudo yum update -y
-    sudo yum install -y httpd.x86_64
+    sudo yum install -y httpd
+    echo $(ec2-metadata -i) | sudo tee /var/www/html/index.html
     sudo systemctl start httpd.service
     sudo systemctl enable httpd.service
-    sudo echo $(ec2-metadata -i) >> /var/www/html/index.html
   EOF
 
   tags = {
@@ -489,7 +331,6 @@ resource "aws_instance" "was" {
   instance_type = "t3.micro"
   subnet_id = aws_subnet.private-was[count.index].id
   vpc_security_group_ids = [ aws_security_group.was.id ]
-  # key_name = "${var.name}-key"
   iam_instance_profile = "hh-terraform-ec2-ssm"
   user_data = <<-EOF
    
@@ -505,21 +346,18 @@ resource "aws_lb_target_group" "web_target" {
   name = "${var.name}-web-target"
   port = 80
   protocol = "HTTP"
+  health_check {
+    path = "/index.html"
+    protocol = "HTTP"
+  }
   vpc_id = aws_vpc.main.id
 }
 
 resource "aws_lb_target_group_attachment" "target_attach1" {
   count = 2
-  # for_each = var.subnet_ids
   target_group_arn = aws_lb_target_group.web_target.arn
-  # target_id = each.value.id
   target_id = aws_instance.web[count.index].id
 }
-
-# resource "aws_lb_target_group_attachment" "target_attach2" {
-#   target_group_arn = aws_lb_target_group.web_target.arn
-#   target_id = aws_instance.web02.id
-# }
 
 resource "aws_lb_listener" "web_alb_listener" {
   load_balancer_arn = aws_alb.web_alb.arn
@@ -536,5 +374,5 @@ resource "aws_alb" "web_alb" {
   internal = false
   load_balancer_type = "application"
   security_groups = [ aws_security_group.alb.id ]
-  subnets = [ aws_subnet.private-web[0].id, aws_subnet.private-web[1].id ]
+  subnets = [ aws_subnet.public-2a-nat.id, aws_subnet.public-2c-bastion.id ]
 }
