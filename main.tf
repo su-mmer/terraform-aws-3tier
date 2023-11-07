@@ -5,6 +5,14 @@ terraform {
       version = "~>4.0"
     }
   }
+
+  cloud {
+    organization = "hee"
+
+    workspaces {
+      name = "terraform-aws-3tier"
+    }
+  }
 }
 
 provider "aws" {
@@ -253,10 +261,10 @@ resource "aws_security_group_rule" "sg_was_egress_443" {
 
 resource "aws_security_group_rule" "sg_db_ingress" {
   type                     = "ingress"
-  from_port                = 80
-  to_port                  = 80
+  from_port                = 0
+  to_port                  = 0
   protocol                 = "TCP"
-  source_security_group_id = aws_security_group.was.id
+  source_security_group_id = aws_security_group.web.id
   security_group_id        = aws_security_group.db.id
 }
 
@@ -325,19 +333,39 @@ resource "aws_instance" "web" {
   }
 }
 
-resource "aws_instance" "was" {
-  count = 2
+# resource "aws_instance" "was" {
+#   count = 2
+#   ami = data.aws_ami.ubuntu.id
+#   instance_type = "t3.micro"
+#   subnet_id = aws_subnet.private-was[count.index].id
+#   vpc_security_group_ids = [ aws_security_group.was.id ]
+#   iam_instance_profile = "hh-terraform-ec2-ssm"
+#   user_data = <<-EOF
+#    #!/bin/bash
+#   EOF
+
+#   tags = {
+#     Name = "${var.name}-was${count.index}"
+#   }
+# }
+
+resource "aws_instance" "db" {
+  count = 1
   ami = data.aws_ami.ubuntu.id
   instance_type = "t3.micro"
-  subnet_id = aws_subnet.private-was[count.index].id
-  vpc_security_group_ids = [ aws_security_group.was.id ]
+  subnet_id = aws_subnet.private-db[count.index].id
+  vpc_security_group_ids = [ aws_security_group.db.id ]
   iam_instance_profile = "hh-terraform-ec2-ssm"
   user_data = <<-EOF
-   
+   #!/bin/bash
+   sudo yum -y install https://dev.mysql.com/get/mysql80-community-release-el9-1.noarch.rpm
+   sudo yum -y install mysql-community-server
+   sudo systemctl start mysqld
+
   EOF
 
   tags = {
-    Name = "${var.name}-was${count.index}"
+    Name = "${var.name}-db${count.index}"
   }
 }
 
